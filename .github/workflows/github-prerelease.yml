@@ -1,0 +1,71 @@
+# To use this workflow, you need to perform some setup on GitHub first in your repository settings.
+# * Under `Actions->General`, set "Workflow permissions" to "Read and write permissions"
+
+name: Build and Publish Pre-Release
+on:
+  push:
+    tags:
+      - "prerelease-*.*.*"
+jobs:
+  build:
+    outputs:
+      thunderstore-package: ${{ steps.create-thunderstore-package.outputs.artifact-id }}
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Repo
+      id: checkout_repo
+      uses: actions/checkout@v4
+      with:
+        submodules: 'recursive'
+
+    - name: Get Apt Packages
+      id: get_apt_packages
+      run: |-
+        sudo apt install -y ninja-build jq python3
+
+    - name: Get Snap Packages
+      id: get_snap_packages
+      run: |-
+        sudo snap install cmake --classic
+
+    - name: Print Python Version
+      id: print_python_version
+      run: |-
+        python3 --version
+
+    - name: Run Buildscript
+      id: run_buildscript
+      run: |-
+        python3 ./modbuild.py thunderstore -n package
+
+    - name: Upload Build Artifacts
+      id: upload_build_artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ThunderstorePackage
+        path: |
+          ./*.thunderstore.zip
+
+    - name: Read Thunderstore Manifest
+      id: read_thunderstore_manifest
+      run: |
+        python3 ./modbuild.py manifest -n package -o ${{ github.workspace }}/manifest.json
+        NAME=$(jq -r '.name' ${{ github.workspace }}/manifest.json)
+        VERSION=$(jq -r '.version_number' ${{ github.workspace }}/manifest.json)
+        DESCRIPTION=$(jq -r '.description' ${{ github.workspace }}/manifest.json)
+        echo "name=$NAME" >> "$GITHUB_OUTPUT"
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        echo "description=$DESCRIPTION" >> "$GITHUB_OUTPUT"
+
+    # Remove this step if you don't want to publish to GitHub as well.
+    - name: Publish Github Release
+      id: publish_github_release
+      uses: softprops/action-gh-release@v2
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        name: Release ${{ steps.read_thunderstore_manifest.outputs.version }}
+        body_path: ./thunderstore_package/CHANGELOG.md
+        files: |
+          ./*thunderstore.zip
+          ./include_in_dependents/*
+        prerelease: true
