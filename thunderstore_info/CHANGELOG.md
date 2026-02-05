@@ -1,5 +1,5 @@
 # CHANGELOG
 
-## Version 1.0.0
+## Version 0.0.1
 
-* Initial release
+- Initial HTTP bridge with /v1/health, /v1/state, and /v1/message.
